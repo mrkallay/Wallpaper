@@ -1,0 +1,473 @@
+How to create an audio-visualizer wallpaper for Wallpaper Engine.
+
+About two weeks ago I came across an application called 'Wallpaper Engine'. This application enables users to set applications, videos and web-pages as desktop background.
+I found this very appealing and tried it out. The wallpapers that are available to select, are created by users who submit it themselves, and because it supports web-based backgrounds, I had a go at it myself.
+
+In this guide we will create an Web based audio visualizer, that responds to the user's audio. When a user plays a song, the desktop should show bars representing the audio. Below is an image of the result of this guide:
+
+<insert video>
+
+What we need :
+- Wallpaper Engine  ( the 'host' application )
+- Webbrowser        ( preferably chrome - because it uses the webkit renderer, which Wallpaper Engine uses too, to render your webpage )
+- jQuery library    ( not necessary, but helps a lot )
+- CreateJS library  ( not necessary, but helps a lot )
+
+Small description of the required items;
+
+We need Wallpaper Engine as our host application. To run and test our wallpaper in a 'live' situation ( your own desktop ).
+
+jQuery will be used throughout this guide. jQuery is a javascript library that has a lot neat functions that makes certain operations more easy to complete. 
+If you don't want to use jQuery, please replace all code that uses jQuery selectors with your own prefered library ( or plain javascript ofcourse )
+<download link jQuery>
+
+CreateJS is a library that helps structure your project when working with a canvas element. It consists of 4 sperate libraries;
+- EaselJS   : Helps with drawing to the canvas.
+- TweenJS   : Helps with tweening/transitions objects on the canvas ( movement/ fade etc. )
+- SoundJS   : Helps with audio support across browsers, and controlling audio. ( we will not use this library in this guide, because we won't use our own audio )
+- PreloadJS : Helps with preloading of many files ( progress bar ). ( we will not use this library in this guide, because we won't be loading a lot of local files into javascript )
+<download link CreateJS>
+
+for the least amount of overhead, you could download EaselJS and TweenJS sperate, but for the sake of comprehension we will use the CreateJS library in this guide.
+
+NOTE : Please remember to download the libraries and use local references, you could also add CDN links in your HTML, but if the user doesn't have an internet connection, your wallpaper will not work!
+
+Let's start!
+
+Basic Project setup:
+
+index.html          <-- web page file
+script.js           <-- javascript code file
+style.css           <-- style sheet file
+project.json        <-- file required for Wallpaper Engine
+libs/
+    jquery.js       <-- note that I have ommited the version number here in the name
+    createjs.js     <-- note that I have ommited the version number here in the name
+
+First of all, we need to create an project.json file. This file keeps track of settings of your project for Wallpaper Engine. 
+In this file you can specify the title and description of your project, as well as user settings that users can control from Wallpaper Engine.
+
+For this 'project', we'll be using a stripped down project.json file with no customizabilit from the user. You can just copy paste the content below to your project.json file:
+
+{
+    "file": "index.html",
+    "general": {
+        "supportsaudioprocessing": true
+    },
+    "title": "Customizable Rainbow Visualizer Lines",
+    "type": "web"
+}
+
+We are telling Wallpaper Engine that the file we want to use is our 'index.html' web page. We also specify a title for our 'project'. 
+Wallpaper Engine also needs to know what 'type' of wallpaper we have created, which is 'web'. Now the most notable thing in this file is the 'general' property, 
+where we have specified that our wallpaper supports audio processing. If we do not set this property to true, our wallpaper will not receive audio data.
+
+After we have set up our project file, let's take a look at the HTML file. We will keep it as simple as possible. 
+
+<html>
+
+<head>
+    <!-- Styling -->
+    <link href="style.css" rel="stylesheet" type="text/css">
+
+    <!-- External libraries -->
+    <script src="libs/jquery.js"></script>
+    <script src="libs/createjs.js"></script>
+
+    <!-- Our own scripts -->
+    <script src="script.js"></script>
+</head>
+
+<body>
+    <canvas id="canvas"></canvas>
+</body>
+
+</html>
+
+A very basic HTML page, that loads the 2 libraries we are going to use in our own script file, and a style sheet for CSS rules we need in our project.
+
+When you open the page, the canvas element is by default transparent. You will also see that the default size of the canvas is 300x150 pixels. 
+Please note that just setting the size of the canvas to 100% height and 100% width will stretch the canvas to fullscreen, but will not change the drawing resolution.
+You will need to set the resolution of the canvas manually by specifying the 'width' and 'height' attributes of the canvas.
+
+But because we don't know the resultion of the user's screen, we will set it dynamically using jQuery in our script file with the following code:
+
+// Set canvas width and height (resolution) attributes to screen resolution
+$("#canvas").attr({
+    width: $(document).width(),
+    height: $(document).height()
+});
+
+Next we will add some basic styles to make the canvas 'fullscreen'. We need to remove any space the body tag reserves, and scale the canvas to height and width.
+Note that the code we inserted just before, will also set the size of the canvas, but only after the script is triggered. To prevent a 'flicker' effect, we style it using CSS as well.
+
+We will do this using the following CSS:
+
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: black;
+}
+
+#canvas {
+    position: absolute;
+    width: 100vw;
+    height: 100vh;
+}
+
+This will be all the styling we need for this project. You can change the background-color to any color you like. But for this guide we will use a black background.
+
+Now when you open the index.html file, you should see a completely black window. The canvas should fill the screen.
+
+Now we can get into the fun part; creating the visualizer using javascript.
+
+first we will create an plugin-like wrapper for the 'visualizer', (that looks a bit like a jQuery plugin). Like this:
+
+var WE_visualizer = (function($, createjs) {
+
+    // Scope defintion to empty object
+    var _ = {};
+
+    // Initializer function
+    var init = function() {
+
+    }
+
+    $(document).ready(function() {
+        // Initializer WE Visualizer
+        init();
+    });
+
+})(jQuery, createjs);
+
+Now we can move the piece of code we made earlier into this plugin. Just add a function called 'setCanvasSize' to the scope, and call it in the Initialize ( on document ready )
+The code below is a selected piece of the total file. From now on, code that is shown, is only the new parts in the file, and not the complete set of code.
+
+// Initializer function
+var init = function() {
+    _.setCanvasSize();
+}
+
+_.setCanvasSize = function() {
+    // Set canvas width and height attributes to screen resolution
+    $("#canvas").attr({
+        width: $(document).width(),
+        height: $(document).height()
+    });
+}
+
+Wallpaper Engine adds several listeners to the 'window' object for us to use when we develop web-based wallpapers. One of which is the 'wallpaperRegisterAudioListener'.
+This method is called aproximately 20 times a second, and sends an audio sample array with 128 samples. (64 for left channel, 64 for right channel).
+We will use this event listener to get the sound data we want to visualize on the canvas.
+
+if (window.wallpaperRegisterAudioListener) {
+    window.wallpaperRegisterAudioListener(function(data) {
+        /* data is an array with 128 floats */
+    });
+}
+
+Within the visualizer we are going to create a bind() function, that will take care of this for us. we've added an private variable, that keeps track of the 'audioData'. 
+
+// Scope defintion to empty object
+var _ = {};
+
+var audioData = [];
+
+// Initializer function
+var init = function() {
+    _.setCanvasSize();
+
+    _.bind();
+}
+
+// Bind events to the visualizer
+_.bind = function() {
+    if (window.wallpaperRegisterAudioListener) {
+
+        window.wallpaperRegisterAudioListener(function(data) {
+            // data is an array with 128 floats
+            audioData = data;
+        });
+    }
+}
+
+The audio data is refreshed every time Wallpaper Engine sends a new sound sample ( around 20 times a second ). This is potentially an issue, because we want a very smooth visualizer ( running at 60 fps at least! )
+So we need to fill the gaps that we don't receive. We will use TweenJS for 'tweening' the 'old' set of data to the 'new' set of audiodata, so that the ~40 frames in between are supplied with audiodata.
+
+// Scope defintion to empty object
+var _ = {};
+
+var transitionAudioData = [];
+var newAudioData = [];
+
+// Initializer function
+var init = function() {
+    _.setCanvasSize();
+
+    _.bind();
+}
+
+// Bind events to the visualizer
+_.bind = function() {
+    if (window.wallpaperRegisterAudioListener) {
+
+        window.wallpaperRegisterAudioListener(function(data) {
+            // data is an array with 128 floats
+            newAudioData = data;
+
+            if (transitionAudioData.length == newAudioData.length) {
+                // Transition fadedSoundData to 
+                createjs.Tween.get(transitionAudioData, {
+                    override: true
+                }).to(soundData, 50);
+            } else {
+                transitionAudioData = newAudioData;
+            }
+        });
+    }
+}
+
+the Tween will 'get' the previousAudioData and will morph it to the 'new' soundData over a time of 50 miliseconds ( 1000 / 20 = 50 ). 
+This way we create a smooth transition from the 20 samples we get every second for the other frames we want to render.
+
+This means that for the drawing of the visualizer, we will always use the 'transitionAudioData'.
+
+Now that we have all the data we need to draw a visualizer, we can get to the fun part: drawing!
+For this we will use EaselJS ( in the CreateJS library ). We have to define a 'stage' first, we'll do that like this:
+
+// Scope defintion to empty object
+var _ = {};
+
+var previousAudioData = [];
+var newAudioData = [];
+
+var stage;
+
+// Initializer function
+var init = function() {
+    _.setCanvasSize();
+
+    // Create stage for the canvas with ID '#canvas'
+    stage = new createjs.Stage("canvas");
+    
+    // Performance
+    stage.snapToPixel = true;
+    stage.snapToPixelEnabled = true;
+
+    _.bind();
+}
+
+We have added an private variable 'stage', and within the 'init' we create a new Stage object for the canvas. For performance optimalisation we will enable 'snapToPixel'.
+This means the canvas will not place objects at halve pixels. Doing so will result in a bit loss of smoothness in movement ( per pixel ), but gain in FPS and reduced CPU load.
+You can set it to false if you want to see if you can spot a difference in performance/ smoothness.
+
+Now that we have an Stage object, we can add objects to the stage. But first we need to define the method that will be called at every update ( frame ).
+
+For this we need to add these 2 lines of code, we can put them at the final part of the init ( so once the intialization has finished, the visualization will start updating )
+
+// Every 'tick' is the is a 'Frame per Second'
+createjs.Ticker.setFPS(60);
+createjs.Ticker.addEventListener("tick", _.draw);
+
+These 2 lines of code will result in the _.draw() function to be called 60 times per second (approximately). Ofcourse when you reach limits on the CPU for example, the FPS will drop.
+
+so let's create the draw method where we will draw the actual lines.
+
+_.draw = function() {
+
+    // Clear Stage
+    stage.removeAllChildren();
+
+    var spacing = 10; // spacing between lines in pixels
+    var lineWidth = 3; // width of lines in pixels
+    var lineHeightMultiplier = 200; // multiplier for length * audioValue to pixels
+    var color = "red"; // color string ( rgba(255,0,0,1), #FF0000, red )
+
+    // We will loop through all values of the transition audio data and create a line for it
+    for (var x = 0; x < transitionAudioData.length; x++) {
+
+        // Get audio value from the data set for current position
+        var audioValue = transitionAudioData[x];
+
+        // Multiply the value in the audio data set with the height multiplier. 
+        var lineHeight = audioValue * lineHeightMultiplier;
+
+        // Create a new line-shape object
+        var line = new createjs.Shape();
+
+        // Set the width of the line, and the caps to 'round'
+        line.graphics.setStrokeStyle(lineWidth, "round")
+
+        // Set the color of the line to 'red'
+        line.graphics.beginStroke(color);
+
+        // Draw the line from {x,y}, to {x,y}
+        line.graphics.moveTo(x * spacing, -lineHeight);
+        line.graphics.lineTo(x * spacing, lineHeight);
+
+        // Add the line to the stage
+        stage.addChild(line);
+    }
+
+    // Update the stage ( this is the actual drawing method )
+    stage.update();
+}
+
+Wow! that was a lot of code at a time. Let's dissect it piece by piece to understand what happens here.
+
+First we clear the stage from any items that are left in it. Usually you don't have to do this, but because we are going to draw a completely new image every frame, it's the easiest way to handle this.
+As an alternative, you could first create all the line objects in the Init() method, add them to the stage, and keep a reference to every line in your Visualizer object. 
+Then clear the 'graphics' object of the line every frame, and draw it anew for the line object. 
+
+After clearing the stage we define some variables which will control how what our lines look like; width, height, spacing and color. the color variable can be any valid CSS color string 
+(ex. rgba(255,0,0,0.5), #FF0000, red )
+
+We loop through every value in the audioData array, and create a new 'shape' object for it. We set the style, color, start position and end position.
+after we created the draw definition of our line ( on the graphics object of the shape ), we add it to the stage, so it will be drawn to the canvas.
+
+At the end of our draw() function, we update the stage. This will perform all the drawing operations of the objects that are in the stage. ( in our case, 128 shape objects )
+
+This should already work with Wallpaper Engine, but the positioning of the lines will be off. But if we open in a browser, we still won't see anything.
+This is because the 'window.wallpaperRegisterAudioListener' only exists and returns data when it is openened with Wallpaper Engine. So if we want to test it in a browser, 
+we need to make sure there is some fake data generated, which we can use to 'finetune' our visualizer to our taste.
+
+So we will create the following piece for code to make it 'work' in a browser as well: 
+
+// Bind events to the visualizer
+_.bind = function() {
+    if (window.wallpaperRegisterAudioListener) {
+
+        window.wallpaperRegisterAudioListener(function(data) {
+            // data is an array with 128 floats
+            newAudioData = data;
+
+            if (transitionAudioData.length == newAudioData.length) {
+                // Transition fadedSoundData to 
+                createjs.Tween.get(transitionAudioData, {
+                    override: true
+                }).to(soundData, 50);
+            } else {
+                transitionAudioData = newAudioData;
+            }
+        });
+    } else {
+        setInterval(function() {
+            transitionAudioData = [];
+            for (x = 0; x < 128; x++) {
+                transitionAudioData.push(Math.random() * 1);
+            }
+        }, 75);
+    }
+}
+
+we already checked before if the window.wallpaperRegisterAudioListener existed, but now we have added an 'else' clause that on a 75ms interval generates a random audioData array.
+This way we can open the index.html both in Wallpaper Engine, and in a browser. (Although it won't respond to sound in the browser ofcourse)
+
+Now, when you open the index.html in your browser, you should see some 'dancing' red lines at the top of your screen.
+
+<insert image here>
+
+We can now update our draw() function, to correctly place the lines in the center of the screen.
+
+_.draw = function() {
+
+    // Clear Stage
+    stage.removeAllChildren();
+
+    var spacing = 10; // spacing between lines in pixels
+    var lineWidth = 3; // width of lines in pixels
+    var lineHeightMultiplier = 200; // multiplier for length * audioValue to pixels
+    var color = "red"; // color string ( rgba(255,0,0,1), #FF0000, red )
+
+    var totalWidth = transitionAudioData.length * spacing - spacing;
+    var offsetX = (stage.canvas.width - totalWidth) / 2;
+    var offsetY = stage.canvas.height / 2;
+
+    // We will loop through all values of the transition audio data and create a line for it
+    for (var x = 0; x < transitionAudioData.length; x++) {
+
+        // Get audio value from the data set for current position
+        var audioValue = transitionAudioData[x];
+
+        // Multiply the value in the audio data set with the height multiplier. 
+        var lineHeight = audioValue * lineHeightMultiplier;
+
+        // Create a new line-shape object
+        var line = new createjs.Shape();
+
+        // Set the width of the line, and the caps to 'round'
+        line.graphics.setStrokeStyle(lineWidth, "round")
+
+        // Set the color of the line to 'red'
+        line.graphics.beginStroke(color);
+
+        // Draw the line from {x,y}, to {x,y}
+        line.graphics.moveTo(x * spacing + offsetX, -lineHeight + offsetY);
+        line.graphics.lineTo(x * spacing + offsetX, lineHeight + offsetY);
+
+        // Add the line to the stage
+        stage.addChild(line);
+    }
+
+    // Update the stage ( this is the actual drawing method )
+    stage.update();
+}
+
+Above is the updated 'draw()' function. There are 3 variables added (totalWidth, offsetX and offsetY). 
+The total width is just a sum of all the space between lines ( a line itself does not take any space ).
+
+We take the width of the canvas, and subtract the calculated total width, we divide it by 2 (left and right), and set it as the default OffsetX.
+
+For the offsetY we just take the height of the canvas, divided by 2. So the bars are placed vertically centered.
+
+To verify the placement is correct, we can open our index.html in the browser again ( or refresh the page if you still had it open ), and the visualizer should be centered now!
+Now we can go to Wallpaper Engine, at the bottom left corner, there is a button to 'open local', select the index.html.
+
+You should now have a working visualizer as your desktop background, that responds to all the sounds of your PC!
+
+Final Steps:
+
+The data that we receive from Wallpaper Engine is a very 'raw' set of data. We can make is a bit more smooth by applying a 'pink noise correction' on it.
+
+// Bind events to the visualizer
+_.bind = function() {
+    if (window.wallpaperRegisterAudioListener) {
+
+        window.wallpaperRegisterAudioListener(function(data) {
+
+            // data is an array with 128 floats
+            newAudioData = correctWithPinkNoiseResults(data);
+
+            if (transitionAudioData.length == newAudioData.length) {
+
+                // Transition fadedSoundData to 
+                createjs.Tween.get(transitionAudioData, {
+                    override: true
+                }).to(newAudioData, 50);
+
+            } else {
+                transitionAudioData = newAudioData;
+            }
+        });
+    } else {
+        setInterval(function() {
+            transitionAudioData = [];
+            for (x = 0; x < 128; x++) {
+                transitionAudioData.push(Math.random() * 1);
+            }
+        }, 75);
+    }
+}
+
+// Apply Pink Noise correction to the audio data supplied by Wallpaper Engine
+function correctWithPinkNoiseResults(data) {
+
+    var pinkNoise = [1.1760367470305, 0.85207379418243, 0.68842437227852, 0.63767902570829, 0.5452348949654, 0.50723325864167, 0.4677726234682, 0.44204182748767, 0.41956517802157, 0.41517375040002, 0.41312118577934, 0.40618363960446, 0.39913707474975, 0.38207008614508, 0.38329789106488, 0.37472136606245, 0.36586428412968, 0.37603017335105, 0.39762590761573, 0.39391828858591, 0.37930603769622, 0.39433365764563, 0.38511504613859, 0.39082579241834, 0.3811852720504, 0.40231453727161, 0.40244151133175, 0.39965366884521, 0.39761103827545, 0.51136400422212, 0.66151212038954, 0.66312205226679, 0.7416276690995, 0.74614971301133, 0.84797007577483, 0.8573583910469, 0.96382997811663, 0.99819377577185, 1.0628692615814, 1.1059083969751, 1.1819808497335, 1.257092297208, 1.3226521464753, 1.3735992532905, 1.4953223705889, 1.5310064942373, 1.6193923584808, 1.7094805527135, 1.7706604552218, 1.8491987941428, 1.9238418849406, 2.0141596921333, 2.0786429508827, 2.1575522518646, 2.2196355526005, 2.2660112509705, 2.320762171749, 2.3574848254513, 2.3986127976537, 2.4043566176474, 2.4280476777842, 2.3917477397336, 2.4032522546622, 2.3614180150678];
+
+    for (var i = 0; i < 64; i++) {
+        data[i] /= pinkNoise[i];
+        data[i + 64] /= pinkNoise[i];
+    }
+    return data;
+}
